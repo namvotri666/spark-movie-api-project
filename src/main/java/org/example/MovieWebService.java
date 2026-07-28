@@ -36,7 +36,7 @@ public class MovieWebService {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
- 
+  /* Chinh sua tren server may client */
         // API Endpoint: GET /api/movies/:id
         Spark.get("/api/movies/:id", (req, res) -> {
             res.type("application/json; charset=utf-8");
