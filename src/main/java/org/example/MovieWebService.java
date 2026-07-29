@@ -65,22 +65,32 @@ public class MovieWebService {
         }
         /* Chinh sua tren server github */
         Spark.post("/login", (req, res) -> {
-            String user = req.queryParams("username");
-            String pass = req.queryParams("password");
+            res.type("application/json; charset=utf-8");
+            try {
+                // 1. Đọc req.body() và parse thành LoginRequest Object bằng Gson
+                LoginRequest loginReq = gson.fromJson(req.body(), LoginRequest.class);
+                // Kiểm tra xem body truyền lên có bị null không
+                if (loginReq == null || loginReq.getUsername() == null || loginReq.getPassword() == null) {
+                    res.status(400);
+                    return gson.toJson(Map.of("error", "Username và password không được để trống"));
+                }
+                String username = loginReq.getUsername();
+                String password = loginReq.getPassword();
+                // 2. Kiểm tra thông tin đăng nhập
+                if ("nam".equals(username) && "admin".equals(password)) {
+                    // Lưu thông tin vào Session
+                    req.session(true).attribute("user", username);
+                    return gson.toJson(Map.of("message", "Login successful for user: " + username));
+                }
 
-            if ("nam".equals(user) && "admin".equals(pass)) {
-                req.session(true).attribute("user", user);
-                return "Login successful for user: " + user;
-            }
-            res.status(401);
-            return "Invalid username or password";
-        });
-        Spark.post("/logout", (req, res) -> {
-            if (req.session().attribute("user") != null) {
-                req.session().removeAttribute("user");
-                return "Logout successful";
-            } else {
-                return "Already logout. Please login";
+                // 3. Đúng định dạng nhưng sai tài khoản/mật khẩu
+                res.status(401);
+                return gson.toJson(Map.of("error", "Invalid username or password"));
+
+            } catch (Exception e) {
+                // 4. Bắt lỗi nếu client gửi JSON sai cú pháp
+                res.status(400);
+                return gson.toJson(Map.of("error", "Định dạng JSON không hợp lệ"));
             }
         });
 
