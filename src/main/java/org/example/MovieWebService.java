@@ -16,10 +16,37 @@ import java.util.concurrent.TimeUnit;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 
+import java.util.Deque;
+import java.util.LinkedList;
+import java.util.concurrent.ConcurrentHashMap;
+
 public class MovieWebService {
+    private static final String DB_URL = "jdbc:sqlite:../movie-crawler/movies.db";
+    private static final Map<String, Deque<Long>> requestHistory = new ConcurrentHashMap<>();
 
-    private static final String DB_URL = "jdbc:sqlite:../Bai2/movies.db";
-
+    private static boolean isAllowed(String user) {
+        long now = System.currentTimeMillis();
+        Deque<Long> timestamps = requestHistory.computeIfAbsent(user, k -> new LinkedList<>());
+        synchronized (timestamps) {
+            while (!timestamps.isEmpty() && now - timestamps.peekFirst() > 60000) {
+                timestamps.pollFirst();
+            }
+            if (timestamps.size() >= 10) {
+                return false;
+            }
+            int recentCount = 0;
+            for (Long ts : timestamps) {
+                if (now - ts <= 5000) {
+                    recentCount++;
+                }
+            }
+            if (recentCount >= 2) {
+                return false;
+            }
+            timestamps.addLast(now);
+            return true;
+        }
+    }
 
     public static void main(String[] args) {
         Spark.port(8080);
@@ -30,13 +57,44 @@ public class MovieWebService {
                 .expireAfterWrite(20, TimeUnit.SECONDS)
                 .recordStats()
                 .build();
-        try{
+        try {
             Thread.sleep(2000);
             System.out.println("Ti le hit rate: " + (cache.stats().hitRate() * 100) + "%");
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
-  /* Chinh sua tren server github*/
+        /* Chinh sua tren server github */
+        Spark.post("/login", (req, res) -> {
+            String user = req.queryParams("username");
+            String pass = req.queryParams("password");
+
+            if ("nam".equals(user) && "admin".equals(pass)) {
+                req.session(true).attribute("user", user);
+                return "Login successful for user: " + user;
+            }
+            res.status(401);
+            return "Invalid username or password";
+        });
+        Spark.post("/logout", (req, res) -> {
+            if (req.session().attribute("user") != null) {
+                req.session().removeAttribute("user");
+                return "Logout successful";
+            } else {
+                return "Already logout. Please login";
+            }
+        });
+
+        Spark.before("/api/*", (req, res) -> {
+            String user = req.session().attribute("user");
+            if (user == null) {
+                Spark.halt(401, "{\"error\": \"Unauthorized. Please login first at /login\"}");
+            }
+            if (!isAllowed(user)) {
+                Spark.halt(429, "{\"error\": \"Too Many Requests. Max 2 per 5s and 10 per 60s.\"}");
+            }
+            res.type("application/json; charset=utf-8");
+        });
+
         // API Endpoint: GET /api/movies/:id
         Spark.get("/api/movies/:id", (req, res) -> {
             res.type("application/json; charset=utf-8");
@@ -44,7 +102,7 @@ public class MovieWebService {
             String rawId = req.params(":id");
 
             String cachedResult = cache.getIfPresent(rawId);
-            if(cachedResult != null){
+            if (cachedResult != null) {
                 return cachedResult;
             }
             // 1. Dùng PreparedStatement để chống SQL Injection
