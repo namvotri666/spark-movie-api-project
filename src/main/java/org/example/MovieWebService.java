@@ -21,7 +21,7 @@ import java.util.LinkedList;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class MovieWebService {
-    private static final String DB_URL = "jdbc:sqlite:../movie-crawler/movies.db";
+    private static final String DB_URL = "jdbc:sqlite:../movies.db";
     private static final Map<String, Deque<Long>> requestHistory = new ConcurrentHashMap<>();
 
     private static boolean isAllowed(String user) {
